@@ -178,20 +178,50 @@ export const recognizeBasicGesture = (landmarks: Landmark[]) => {
   const states = getFingerStates(landmarks);
   const [thumb, index, middle, ring, pinky] = states;
   const extendedCount = states.filter(s => s).length;
-  
-  const wrist = landmarks[0];
+
   const thumbTip = landmarks[4];
   const indexTip = landmarks[8];
   const middleTip = landmarks[12];
-  const ringTip = landmarks[16];
-  const pinkyTip = landmarks[20];
 
-  // Helper for distance between two landmarks
-  const dist = (p1: Landmark, p2: Landmark) => 
+  const dist = (p1: Landmark, p2: Landmark) =>
     Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+
+  // HELLO — Open palm: all 5 fingers extended
+  if (extendedCount === 5) return { name: 'HELLO', label_ml: 'ഹലോ' };
+
+  // STOP — 4 fingers extended (no thumb)
+  if (!thumb && index && middle && ring && pinky) return { name: 'STOP', label_ml: 'നിർത്തൂ' };
+
+  // YES / GOOD — Thumbs up only
+  if (thumb && !index && !middle && !ring && !pinky) return { name: 'YES', label_ml: 'ശരി' };
+
+  // NO / FIST — All fingers closed
+  if (extendedCount === 0) return { name: 'NO', label_ml: 'ഇല്ല' };
+
+  // ONE / POINT — Only index finger extended
+  if (!thumb && index && !middle && !ring && !pinky) return { name: 'ONE', label_ml: 'ഒന്ന്' };
+
+  // TWO / PEACE — Index and middle extended
+  if (!thumb && index && middle && !ring && !pinky) return { name: 'TWO', label_ml: 'രണ്ട്' };
+
+  // THREE — Thumb, index, middle extended
+  if (thumb && index && middle && !ring && !pinky) return { name: 'THREE', label_ml: 'മൂന്ന്' };
+
+  // FOUR — All except thumb
+  if (!thumb && index && middle && ring && pinky) return { name: 'FOUR', label_ml: 'നാല്' };
+
+  // OK — Thumb and index tips close together, others extended
+  if (dist(thumbTip, indexTip) < 0.05 && middle && ring && pinky) return { name: 'OK', label_ml: 'ശരി' };
+
+  // I LOVE YOU — Thumb, index, and pinky extended
+  if (thumb && index && !middle && !ring && pinky) return { name: 'I LOVE YOU', label_ml: 'ഞാൻ നിന്നെ സ്നേഹിക്കുന്നു' };
+
+  // CALL ME — Thumb and pinky extended only
+  if (thumb && !index && !middle && !ring && pinky) return { name: 'CALL ME', label_ml: 'വിളിക്കൂ' };
 
   return null;
 };
+
 
 export const recognizeGesture = (
   liveLandmarks: Landmark[], 
