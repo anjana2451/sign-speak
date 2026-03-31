@@ -1,0 +1,344 @@
+export interface Landmark {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface Gesture {
+  id: string;
+  name: string;
+  label_ml: string;
+  landmarks: Landmark[]; // Primary hand landmarks (or right hand for two-handed)
+  landmarksLeft?: Landmark[]; // Optional secondary hand landmarks (left hand for two-handed)
+  isTwoHanded: boolean;
+}
+
+// Calculate hand scale (distance between wrist and middle finger base)
+export const getHandScale = (landmarks: Landmark[]) => {
+  if (!landmarks || landmarks.length < 10) return 0.15;
+  const wrist = landmarks[0];
+  const middleBase = landmarks[9];
+  if (!wrist || !middleBase) return 0.15;
+  return Math.sqrt(
+    Math.pow(middleBase.x - wrist.x, 2) + 
+    Math.pow(middleBase.y - wrist.y, 2) + 
+    Math.pow(middleBase.z - wrist.z, 2)
+  );
+};
+
+// Calculate Euclidean distance between two vectors of landmarks
+export const calculateEuclideanDistance = (v1: Landmark[], v2: Landmark[]) => {
+  if (!v1 || !v2 || v1.length !== v2.length) return Infinity;
+  let sum = 0;
+  for (let i = 0; i < v1.length; i++) {
+    if (!v1[i] || !v2[i]) continue;
+    sum += Math.pow(v1[i].x - v2[i].x, 2) + 
+           Math.pow(v1[i].y - v2[i].y, 2) + 
+           Math.pow(v1[i].z - v2[i].z, 2);
+  }
+  return Math.sqrt(sum);
+};
+
+// Calculate Cosine Similarity between two vectors of landmarks
+export const calculateCosineSimilarity = (v1: Landmark[], v2: Landmark[]) => {
+  if (!v1 || !v2 || v1.length !== v2.length) return 0;
+  
+  let dotProduct = 0;
+  let mag1 = 0;
+  let mag2 = 0;
+  
+  for (let i = 0; i < v1.length; i++) {
+    const p1 = v1[i];
+    const p2 = v2[i];
+    if (!p1 || !p2) continue;
+    
+    dotProduct += (p1.x * p2.x) + (p1.y * p2.y) + (p1.z * p2.z);
+    mag1 += (p1.x * p1.x) + (p1.y * p1.y) + (p1.z * p1.z);
+    mag2 += (p2.x * p2.x) + (p2.y * p2.y) + (p2.z * p2.z);
+  }
+  
+  const denominator = Math.sqrt(mag1) * Math.sqrt(mag2);
+  return denominator === 0 ? 0 : dotProduct / denominator;
+};
+
+// Calculate proximity score between two points (1.0 = touching, 0.0 = far)
+export const getProximityScore = (p1: Landmark, p2: Landmark, threshold = 0.1) => {
+  const d = Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2) + Math.pow(p1.z - p2.z, 2));
+  return Math.max(0, 1 - (d / threshold));
+};
+
+// Calculate Centroid of landmarks
+export const calculateCentroid = (landmarks: Landmark[]) => {
+  if (!landmarks || landmarks.length === 0) return { x: 0, y: 0, z: 0 };
+  let x = 0, y = 0, z = 0;
+  let count = 0;
+  landmarks.forEach(l => {
+    if (l) {
+      x += l.x;
+      y += l.y;
+      z += l.z;
+      count++;
+    }
+  });
+  return count === 0 ? { x: 0, y: 0, z: 0 } : { x: x / count, y: y / count, z: z / count };
+};
+
+// Calculate Palm Normal vector
+export const getPalmNormal = (landmarks: Landmark[]) => {
+  if (!landmarks || landmarks.length < 18) return { x: 0, y: 0, z: 1 };
+  const wrist = landmarks[0];
+  const indexBase = landmarks[5];
+  const pinkyBase = landmarks[17];
+  
+  if (!wrist || !indexBase || !pinkyBase) return { x: 0, y: 0, z: 1 };
+  
+  const v1 = { x: indexBase.x - wrist.x, y: indexBase.y - wrist.y, z: indexBase.z - wrist.z };
+  const v2 = { x: pinkyBase.x - wrist.x, y: pinkyBase.y - wrist.y, z: pinkyBase.z - wrist.z };
+  
+  // Cross product
+  const normal = {
+    x: v1.y * v2.z - v1.z * v2.y,
+    y: v1.z * v2.x - v1.x * v2.z,
+    z: v1.x * v2.y - v1.y * v2.x
+  };
+  
+  // Normalize
+  const mag = Math.sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
+  return mag === 0 ? normal : { x: normal.x / mag, y: normal.y / mag, z: normal.z / mag };
+};
+
+// Calculate Dot Product
+export const dotProduct = (v1: Landmark, v2: Landmark) => {
+  return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
+};
+
+// Normalize landmarks relative to the wrist (landmark 0) and scale
+export const normalizeLandmarks = (landmarks: Landmark[]) => {
+  if (!landmarks || landmarks.length < 10) return landmarks;
+  const wrist = landmarks[0];
+  if (!wrist) return landmarks;
+  
+  // 1. Translate to wrist origin
+  const translated = landmarks.map(l => {
+    if (!l) return { x: 0, y: 0, z: 0 };
+    return {
+      x: l.x - wrist.x,
+      y: l.y - wrist.y,
+      z: l.z - wrist.z
+    };
+  });
+  
+  // 2. Scale normalization (using distance between wrist and middle finger base - landmark 9)
+  const middleBase = translated[9];
+  if (!middleBase) return translated;
+  const scale = Math.sqrt(
+    Math.pow(middleBase.x, 2) + 
+    Math.pow(middleBase.y, 2) + 
+    Math.pow(middleBase.z, 2)
+  );
+  
+  if (scale === 0) return translated;
+  
+  return translated.map(l => ({
+    x: l.x / scale,
+    y: l.y / scale,
+    z: l.z / scale
+  }));
+};
+
+// Helper to check if a finger is extended
+export const isFingerExtended = (landmarks: Landmark[], fingerIndex: number) => {
+  if (!landmarks || landmarks.length < fingerIndex * 4 + 5) return false;
+  const tip = landmarks[fingerIndex * 4 + 4];
+  const mcp = landmarks[fingerIndex * 4 + 1];
+  const wrist = landmarks[0];
+  
+  if (!tip || !mcp || !wrist) return false;
+  
+  // Distance from wrist to tip vs distance from wrist to MCP
+  const distTip = Math.sqrt(Math.pow(tip.x - wrist.x, 2) + Math.pow(tip.y - wrist.y, 2));
+  const distMcp = Math.sqrt(Math.pow(mcp.x - wrist.x, 2) + Math.pow(mcp.y - wrist.y, 2));
+  
+  return distTip > distMcp * 1.2; // 20% further away
+};
+
+export const getFingerStates = (landmarks: Landmark[]) => {
+  // 0: Thumb, 1: Index, 2: Middle, 3: Ring, 4: Pinky
+  return [
+    isFingerExtended(landmarks, 0),
+    isFingerExtended(landmarks, 1),
+    isFingerExtended(landmarks, 2),
+    isFingerExtended(landmarks, 3),
+    isFingerExtended(landmarks, 4),
+  ];
+};
+
+export const recognizeBasicGesture = (landmarks: Landmark[]) => {
+  if (!landmarks || landmarks.length < 21) return null;
+  const states = getFingerStates(landmarks);
+  const [thumb, index, middle, ring, pinky] = states;
+  const extendedCount = states.filter(s => s).length;
+  
+  const wrist = landmarks[0];
+  const thumbTip = landmarks[4];
+  const indexTip = landmarks[8];
+  const middleTip = landmarks[12];
+  const ringTip = landmarks[16];
+  const pinkyTip = landmarks[20];
+
+  // Helper for distance between two landmarks
+  const dist = (p1: Landmark, p2: Landmark) => 
+    Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+
+  return null;
+};
+
+export const recognizeGesture = (
+  liveLandmarks: Landmark[], 
+  savedGestures: Gesture[],
+  liveLandmarksLeft?: Landmark[] | null,
+  thresholdEuclidean = 0.7,
+  thresholdCosine = 0.93
+) => {
+  // 1. Calculate dynamic thresholds based on hand scale
+  const scale = getHandScale(liveLandmarks);
+  const scaleLeft = liveLandmarksLeft ? getHandScale(liveLandmarksLeft) : 0;
+  const avgScale = liveLandmarksLeft ? (scale + scaleLeft) / 2 : scale;
+
+  // Reference scale (comfortable distance) is around 0.15
+  // Smaller scale (farther away) -> more noise -> looser thresholds
+  // Larger scale (closer) -> less noise -> stricter thresholds
+  const scaleFactor = Math.max(0.5, Math.min(2.0, 0.15 / avgScale));
+  
+  const dynamicEuclidean = thresholdEuclidean * scaleFactor;
+  const dynamicCosine = Math.max(0.8, Math.min(0.98, 1 - ((1 - thresholdCosine) * scaleFactor)));
+
+  // 2. Try custom gestures first
+  const normalizedLive = normalizeLandmarks(liveLandmarks);
+  const normalizedLiveLeft = liveLandmarksLeft ? normalizeLandmarks(liveLandmarksLeft) : null;
+
+  // 3. Basic Two-Handed Gestures (Namaskaram & ISL Alphabets)
+  if (liveLandmarks && liveLandmarksLeft) {
+    const rStates = getFingerStates(liveLandmarks);
+    const lStates = getFingerStates(liveLandmarksLeft);
+    const rExt = rStates.filter(s => s).length;
+    const lExt = lStates.filter(s => s).length;
+    
+    const [rThumb, rIndex, rMiddle, rRing, rPinky] = rStates;
+    const [lThumb, lIndex, lMiddle, lRing, lPinky] = lStates;
+
+    const rWrist = liveLandmarks[0];
+    const lWrist = liveLandmarksLeft[0];
+    const rIndexTip = liveLandmarks[8];
+    const lIndexTip = liveLandmarksLeft[8];
+    const rThumbTip = liveLandmarks[4];
+    const lThumbTip = liveLandmarksLeft[4];
+    const rMiddleTip = liveLandmarks[12];
+    const lMiddleTip = liveLandmarksLeft[12];
+    const rRingTip = liveLandmarks[16];
+    const lRingTip = liveLandmarksLeft[16];
+    const rPinkyTip = liveLandmarks[20];
+    const lPinkyTip = liveLandmarksLeft[20];
+    
+    const dist = (p1: Landmark, p2: Landmark) => 
+      Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+    
+    const rCentroid = calculateCentroid(liveLandmarks);
+    const lCentroid = calculateCentroid(liveLandmarksLeft);
+    const rNormal = getPalmNormal(liveLandmarks);
+    const lNormal = getPalmNormal(liveLandmarksLeft);
+
+    const handDist = Math.sqrt(Math.pow(rWrist.x - lWrist.x, 2) + Math.pow(rWrist.y - lWrist.y, 2));
+    const centroidDist = Math.sqrt(Math.pow(rCentroid.x - lCentroid.x, 2) + Math.pow(rCentroid.y - lCentroid.y, 2));
+    const tipDist = Math.sqrt(Math.pow(rIndexTip.x - lIndexTip.x, 2) + Math.pow(rIndexTip.y - lIndexTip.y, 2));
+    const normalDot = dotProduct(rNormal, lNormal);
+
+    // Safety check for critical landmarks
+    if (rWrist && lWrist && rIndexTip && lIndexTip && rThumbTip && lThumbTip && rMiddleTip && lMiddleTip) {
+      // HEART: Two hands forming a heart shape
+      // Tips of index fingers touching, tips of thumbs touching, palms angled
+      const indexTipProx = getProximityScore(rIndexTip, lIndexTip, 0.1);
+      const thumbTipProx = getProximityScore(rThumbTip, lThumbTip, 0.1);
+      if (indexTipProx > 0.6 && thumbTipProx > 0.6 && rExt >= 1 && lExt >= 1) {
+        // Check for heart-like orientation (palms facing somewhat towards the user/camera)
+        if (rNormal.z < -0.3 && lNormal.z < -0.3) {
+          return { 
+            gesture: { id: 'heart', name: 'HEART', label_ml: 'ഹൃദയം (സ്നേഹം)', landmarks: [], isTwoHanded: true }, 
+            score: (indexTipProx + thumbTipProx) / 2 
+          };
+        }
+      }
+
+          }
+  }
+  
+  let bestMatch: Gesture | null = null;
+  let highestScore = -1;
+
+  for (const gesture of savedGestures) {
+    if (gesture.isTwoHanded) {
+      if (!normalizedLiveLeft || !gesture.landmarksLeft) continue;
+      
+      const cosineRight = calculateCosineSimilarity(normalizedLive, gesture.landmarks);
+      const euclideanRight = calculateEuclideanDistance(normalizedLive, gesture.landmarks);
+      const cosineLeft = calculateCosineSimilarity(normalizedLiveLeft, gesture.landmarksLeft);
+      const euclideanLeft = calculateEuclideanDistance(normalizedLiveLeft, gesture.landmarksLeft);
+      
+      // Orientation matching
+      const normalRightLive = getPalmNormal(liveLandmarks);
+      const normalRightSaved = getPalmNormal(gesture.landmarks);
+      const normalLeftLive = getPalmNormal(liveLandmarksLeft);
+      const normalLeftSaved = getPalmNormal(gesture.landmarksLeft);
+      const dotRight = dotProduct(normalRightLive, normalRightSaved);
+      const dotLeft = dotProduct(normalLeftLive, normalLeftSaved);
+      
+      const avgCosine = (cosineRight + cosineLeft) / 2;
+      
+      if (cosineRight > dynamicCosine && euclideanRight < dynamicEuclidean &&
+          cosineLeft > dynamicCosine && euclideanLeft < dynamicEuclidean &&
+          dotRight > 0.7 && dotLeft > 0.7) {
+        if (avgCosine > highestScore) {
+          highestScore = avgCosine;
+          bestMatch = gesture;
+        }
+      }
+    } else {
+      const euclidean = calculateEuclideanDistance(normalizedLive, gesture.landmarks);
+      const cosine = calculateCosineSimilarity(normalizedLive, gesture.landmarks);
+      
+      // Orientation matching
+      const normalLive = getPalmNormal(liveLandmarks);
+      const normalSaved = getPalmNormal(gesture.landmarks);
+      const dot = dotProduct(normalLive, normalSaved);
+      
+      if (cosine > dynamicCosine && euclidean < dynamicEuclidean && dot > 0.7) {
+        if (cosine > highestScore) {
+          highestScore = cosine;
+          bestMatch = gesture;
+        }
+      }
+      
+      if (normalizedLiveLeft) {
+        const euclideanL = calculateEuclideanDistance(normalizedLiveLeft, gesture.landmarks);
+        const cosineL = calculateCosineSimilarity(normalizedLiveLeft, gesture.landmarks);
+        const normalLiveL = getPalmNormal(liveLandmarksLeft);
+        const dotL = dotProduct(normalLiveL, normalSaved);
+        
+        if (cosineL > dynamicCosine && euclideanL < dynamicEuclidean && dotL > 0.7) {
+          if (cosineL > highestScore) {
+            highestScore = cosineL;
+            bestMatch = gesture;
+          }
+        }
+      }
+    }
+  }
+
+  if (bestMatch) return { gesture: bestMatch, score: highestScore };
+
+  // 2. Fallback to basic finger-state gestures
+  const basic = recognizeBasicGesture(liveLandmarks);
+  if (basic) return { gesture: { ...basic, id: 'basic', landmarks: [], isTwoHanded: false }, score: 0.8 };
+
+  return { gesture: null, score: -1 };
+};

@@ -1,0 +1,8 @@
+{
+  "name": "Sign-Speak",
+  "description": "Real-time Sign Language-to-Speech translator for Malayalam and English.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
