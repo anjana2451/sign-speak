@@ -179,21 +179,32 @@ export const recognizeBasicGesture = (landmarks: Landmark[]) => {
   const [thumb, index, middle, ring, pinky] = states;
   const extendedCount = states.filter(s => s).length;
 
+  const wrist = landmarks[0];
   const thumbTip = landmarks[4];
   const indexTip = landmarks[8];
   const middleTip = landmarks[12];
+  const ringTip = landmarks[16];
+  const pinkyTip = landmarks[20];
+  const thumbMcp = landmarks[2];
 
   const dist = (p1: Landmark, p2: Landmark) =>
     Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
 
-  // HELLO — Open palm: all 5 fingers extended
+  // HELLO / FIVE — Open palm: all 5 fingers extended
   if (extendedCount === 5) return { name: 'HELLO', label_ml: 'ഹലോ' };
 
-  // STOP — 4 fingers extended (no thumb)
+  // STOP / WAIT — 4 fingers extended (no thumb), palm forward
   if (!thumb && index && middle && ring && pinky) return { name: 'STOP', label_ml: 'നിർത്തൂ' };
 
-  // YES / GOOD — Thumbs up only
-  if (thumb && !index && !middle && !ring && !pinky) return { name: 'YES', label_ml: 'ശരി' };
+  // GOOD — Thumbs up: only thumb extended AND pointing UP (tip above wrist)
+  if (thumb && !index && !middle && !ring && !pinky && thumbTip.y < wrist.y) {
+    return { name: 'GOOD', label_ml: 'നല്ലത്' };
+  }
+
+  // BAD — Thumbs down: only thumb extended AND pointing DOWN (tip below wrist)
+  if (thumb && !index && !middle && !ring && !pinky && thumbTip.y > wrist.y) {
+    return { name: 'BAD', label_ml: 'മോശം' };
+  }
 
   // NO / FIST — All fingers closed
   if (extendedCount === 0) return { name: 'NO', label_ml: 'ഇല്ല' };
@@ -204,20 +215,37 @@ export const recognizeBasicGesture = (landmarks: Landmark[]) => {
   // TWO / PEACE — Index and middle extended
   if (!thumb && index && middle && !ring && !pinky) return { name: 'TWO', label_ml: 'രണ്ട്' };
 
-  // THREE — Thumb, index, middle extended
-  if (thumb && index && middle && !ring && !pinky) return { name: 'THREE', label_ml: 'മൂന്ന്' };
+  // THREE — Index, middle, ring extended (no thumb, no pinky)
+  if (!thumb && index && middle && ring && !pinky) return { name: 'THREE', label_ml: 'മൂന്ന്' };
 
-  // FOUR — All except thumb
+  // FOUR — All fingers extended except thumb
   if (!thumb && index && middle && ring && pinky) return { name: 'FOUR', label_ml: 'നാല്' };
 
-  // OK — Thumb and index tips close together, others extended
-  if (dist(thumbTip, indexTip) < 0.05 && middle && ring && pinky) return { name: 'OK', label_ml: 'ശരി' };
+  // WATER — W sign: index, middle, ring extended (thumb folded, pinky folded)
+  // Same as THREE but keeping as semantic alias
+  // (handled by THREE above)
+
+  // OK — Thumb and index tips close together, middle+ring+pinky extended
+  if (dist(thumbTip, indexTip) < 0.06 && middle && ring && pinky) {
+    return { name: 'OK', label_ml: 'ശരി' };
+  }
+
+  // PLEASE / THANK YOU — Middle finger touches thumb, index+ring+pinky extended
+  if (dist(thumbTip, middleTip) < 0.06 && index && ring && pinky) {
+    return { name: 'PLEASE', label_ml: 'ദയവായി' };
+  }
 
   // I LOVE YOU — Thumb, index, and pinky extended
   if (thumb && index && !middle && !ring && pinky) return { name: 'I LOVE YOU', label_ml: 'ഞാൻ നിന്നെ സ്നേഹിക്കുന്നു' };
 
   // CALL ME — Thumb and pinky extended only
   if (thumb && !index && !middle && !ring && pinky) return { name: 'CALL ME', label_ml: 'വിളിക്കൂ' };
+
+  // HELP — Index and thumb extended, others closed
+  if (thumb && index && !middle && !ring && !pinky) return { name: 'HELP', label_ml: 'സഹായം' };
+
+  // COME — Ring and pinky only extended
+  if (!thumb && !index && !middle && ring && pinky) return { name: 'COME', label_ml: 'വരൂ' };
 
   return null;
 };
@@ -285,12 +313,31 @@ export const recognizeGesture = (
 
     // Safety check for critical landmarks
     if (rWrist && lWrist && rIndexTip && lIndexTip && rThumbTip && lThumbTip && rMiddleTip && lMiddleTip) {
+
+      // NAMASTE — Both open palms pressed together (all fingers extended, hands very close)
+      const namasteHandDist = centroidDist;
+      const rAllOpen = rExt === 5;
+      const lAllOpen = lExt === 5;
+      if (rAllOpen && lAllOpen && namasteHandDist < 0.15) {
+        return {
+          gesture: { id: 'namaste', name: 'NAMASTE', label_ml: 'നമസ്തേ', landmarks: [], isTwoHanded: true },
+          score: 1 - namasteHandDist
+        };
+      }
+
+      // CLAP / APPLAUSE — Both open palms, hands at similar height, close together
+      const heightDiff = Math.abs(rWrist.y - lWrist.y);
+      if (rAllOpen && lAllOpen && handDist < 0.25 && heightDiff < 0.1) {
+        return {
+          gesture: { id: 'clap', name: 'CLAP', label_ml: 'കൈയടി', landmarks: [], isTwoHanded: true },
+          score: 0.85
+        };
+      }
+
       // HEART: Two hands forming a heart shape
-      // Tips of index fingers touching, tips of thumbs touching, palms angled
       const indexTipProx = getProximityScore(rIndexTip, lIndexTip, 0.1);
       const thumbTipProx = getProximityScore(rThumbTip, lThumbTip, 0.1);
       if (indexTipProx > 0.6 && thumbTipProx > 0.6 && rExt >= 1 && lExt >= 1) {
-        // Check for heart-like orientation (palms facing somewhat towards the user/camera)
         if (rNormal.z < -0.3 && lNormal.z < -0.3) {
           return { 
             gesture: { id: 'heart', name: 'HEART', label_ml: 'ഹൃദയം (സ്നേഹം)', landmarks: [], isTwoHanded: true }, 
@@ -299,7 +346,20 @@ export const recognizeGesture = (
         }
       }
 
-          }
+      // THANK YOU — One open palm touches chin (approximate: one hand open, other fist near face)
+      const rFist = rExt === 0;
+      const lFist = lExt === 0;
+      if ((rAllOpen && lFist) || (lAllOpen && rFist)) {
+        // Hands close together horizontally
+        if (handDist < 0.3) {
+          return {
+            gesture: { id: 'thankyou', name: 'THANK YOU', label_ml: 'നന്ദി', landmarks: [], isTwoHanded: true },
+            score: 0.85
+          };
+        }
+      }
+
+    }
   }
   
   let bestMatch: Gesture | null = null;
