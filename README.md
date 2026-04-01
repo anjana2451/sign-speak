@@ -64,7 +64,7 @@ Sign-Speak solves this by running sign detection and language generation **in th
 
 ## 📁 Proof of Google AI Usage
 
-Add the following screenshots to your `/proof` folder:
+| ![5.png](./proof/5.png) | ![6.png](./proof/6.png) |
 
 ---
 
