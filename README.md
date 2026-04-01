@@ -1,60 +1,99 @@
-# Sign-Speak: Hackathon Documentation
+# Sign-Speak – Real-Time Sign Language to Speech Translator
 
-## 1. System Architecture
+## 📌 Problem Statement
 
-The application follows a **Client-Side First** architecture to ensure low latency for real-time translation.
+Communication between hearing-impaired individuals and people who do not know sign language is often limited in daily scenarios like classrooms, hospitals, markets, and public services. Most solutions either require expensive hardware, large datasets, or cloud dependency — limiting accessibility and real-time usability.
 
-- **Input Layer:** `react-webcam` captures the live video stream.
-- **Processing Layer (AI):** 
-    - **MediaPipe Hands:** Runs in the browser (WebAssembly) to extract 21 3D hand landmarks at ~30fps.
-    - **Gesture Engine:** A custom logic layer that compares real-time landmarks with a local "Gesture Library" using Euclidean distance normalization.
-- **Translation Layer:**
-    - **Local Mapping:** Instant lookup for common gestures.
-    - **Gemini AI (Optional):** Used for complex sentence construction or contextual translation if the gesture sequence is ambiguous.
-- **Output Layer:**
-    - **Web Speech API:** Provides instant Text-to-Speech (TTS) for English and Malayalam.
-    - **Tailwind UI:** High-contrast mobile interface for visual feedback.
+Sign-Speak solves this by running sign detection and language generation **in the browser** using lightweight AI tools, making it fast, affordable, and practical.
 
 ---
 
-## 2. Gesture Similarity Logic
+## 💡 Project Description
 
-To handle "Local/Regional Gestures" without a massive dataset, we use a **One-Shot Learning** approach:
+**Sign-Speak** is a **real-time web application** that:
 
-### Step 1: Normalization
-Landmarks are relative to the camera frame. To make them scale and position invariant:
-1.  **Wrist-Centric:** Subtract the Wrist coordinates (Landmark 0) from all other 20 points.
-2.  **Scaling:** Divide all coordinates by the distance between the wrist and the middle finger base (Landmark 9).
+- Captures hand gestures with a webcam  
+- Detects hand landmarks using Google’s MediaPipe  
+- Matches gestures from a pre-built dictionary  
+- Generates natural sentences using Google Gemini  
+- Outputs text + speech instantly
 
-### Step 2: Distance Calculation
-We use **Euclidean Distance** between the normalized vector of the current hand ($V_{live}$) and the stored gesture vector ($V_{stored}$):
+### How It Works
 
-$$D = \sqrt{\sum_{i=1}^{21} (x_{live,i} - x_{stored,i})^2 + (y_{live,i} - y_{stored,i})^2}$$
-
-### Step 3: Thresholding
-If $D < \epsilon$ (where $\epsilon$ is a small threshold like 0.1), the gesture is recognized.
+1. User enables webcam.  
+2. Hand landmarks are detected at ~30 FPS using MediaPipe Hands.  
+3. Gesture recognition logic finds the closest matching sign.  
+4. Recognized words are sent to Gemini API to form meaningful sentences.  
+5. Output text is displayed and spoken via Web Speech API.
 
 ---
 
-## 3. 48-Hour Hackathon Roadmap
+## ⭐ Key Features
 
-### Phase 1: Foundation (Hour 1 - 8)
-- [x] Project Setup (Vite + Tailwind + MediaPipe).
-- [x] Basic Camera Feed & Hand Landmark Overlay.
-- [x] UI Shell (Mobile-first navigation).
+- ⚡️ **Real-Time Gesture Recognition**  
+- 🤖 **AI-Assisted Sentence Generation (Gemini)**  
+- 🌐 **Offline-Capable Core Logic**  
+- 🔊 **Text + Speech Output**  
+- 🌍 **Supports English & Malayalam**  
+- 📱 **Mobile-Friendly UI**
 
-### Phase 2: Core Engine (Hour 9 - 20)
-- [x] Implement "Record Gesture" utility to save landmark snapshots.
-- [x] Build the Similarity Engine (Euclidean distance logic).
-- [x] Integrate Web Speech API for basic English TTS.
+---
 
-### Phase 3: Malayalam & Listener Mode (Hour 21 - 32)
-- [x] Map gestures to Malayalam labels.
-- [x] Implement "Listener Mode" using `webkitSpeechRecognition`.
-- [x] Add Gemini API for "Smart Translation" (e.g., converting "I" + "Hungry" -> "I am hungry").
+## 🧠 Google AI Usage
 
-### Phase 4: Polish & Demo (Hour 33 - 48)
-- [x] High-contrast UI refinement (Dark mode, bold typography).
-- [x] Add "History" feature to save conversation snippets.
-- [x] Stress testing & latency optimization.
-- [x] Record the demo video!
+### 🛠 Tools / Models Used
+
+- **Google Gemini API** — for natural language sentence generation  
+- **MediaPipe Hands (Google)** — for real-time 21-point hand tracking  
+- **Web Speech API** — for TTS & optional speech recognition
+
+### 🔍 How Google AI Was Used
+
+**MediaPipe Hands**  
+- Extracts high-quality landmark coordinates from webcam feed.  
+- Runs fully in browser for low latency.
+
+**Gemini API**  
+- Converts detected words into smooth, contextual sentences.  
+- Example: Input → `I HUNGRY` → Output → `I am hungry`
+
+**Web Speech API**  
+- Converts the final sentence to audible speech.
+
+---
+
+## 📁 Proof of Google AI Usage
+
+Add the following screenshots to your `/proof` folder:
+
+---
+
+## 📸 Screenshots
+
+| Gesture Tracking | Translation UI |
+|-----------------|----------------|
+| ![1.png](./screenshots/1.png) | ![2.png](./screenshots/2.png) |
+| ![3.png](./screenshots/3.png) | ![4.png](./screenshots/4.png) |
+
+---
+
+## ▶ Demo Video
+
+👉 **Watch Demo:** `https://drive.google.com/file/d/1NMuuSyPmX4YPL-N-ZhthNyipbF7kDsuV/view?usp=drive_link`
+
+---
+
+## 🚀 Installation Steps
+
+```bash
+# Clone
+git clone https://github.com/anjana2451/sign-speak0
+
+# Go inside
+cd sign-speak0
+
+# Install dependencies
+npm install
+
+# Run project
+npm start
