@@ -148,19 +148,40 @@ export const normalizeLandmarks = (landmarks: Landmark[]) => {
 
 // Helper to check if a finger is extended
 export const isFingerExtended = (landmarks: Landmark[], fingerIndex: number) => {
-  if (!landmarks || landmarks.length < fingerIndex * 4 + 5) return false;
-  const tip = landmarks[fingerIndex * 4 + 4];
-  const mcp = landmarks[fingerIndex * 4 + 1];
+  if (!landmarks || landmarks.length < 21) return false;
+
+  if (fingerIndex === 0) {
+    // Thumb: tip should be clearly further from the MCP than the IP joint
+    const tip = landmarks[4];  // Thumb tip
+    const ip  = landmarks[3];  // Thumb IP joint
+    const mcp = landmarks[2];  // Thumb MCP joint
+    if (!tip || !ip || !mcp) return false;
+    const tipToMcp = Math.sqrt(Math.pow(tip.x - mcp.x, 2) + Math.pow(tip.y - mcp.y, 2));
+    const ipToMcp  = Math.sqrt(Math.pow(ip.x  - mcp.x, 2) + Math.pow(ip.y  - mcp.y, 2));
+    return tipToMcp > ipToMcp * 1.4;
+  }
+
+  // Fingers 1–4 (index, middle, ring, pinky):
+  // A finger is extended if its TIP is further from the wrist than its PIP (second knuckle).
+  // Landmark layout per finger: MCP=[f*4+1], PIP=[f*4+2], DIP=[f*4+3], TIP=[f*4+4]
+  const tip  = landmarks[fingerIndex * 4 + 4]; // fingertip
+  const pip  = landmarks[fingerIndex * 4 + 2]; // second knuckle
+  const mcp  = landmarks[fingerIndex * 4 + 1]; // base knuckle
   const wrist = landmarks[0];
-  
-  if (!tip || !mcp || !wrist) return false;
-  
-  // Distance from wrist to tip vs distance from wrist to MCP
-  const distTip = Math.sqrt(Math.pow(tip.x - wrist.x, 2) + Math.pow(tip.y - wrist.y, 2));
-  const distMcp = Math.sqrt(Math.pow(mcp.x - wrist.x, 2) + Math.pow(mcp.y - wrist.y, 2));
-  
-  return distTip > distMcp * 1.2; // 20% further away
+
+  if (!tip || !pip || !mcp || !wrist) return false;
+
+  // Primary check: tip is further from wrist than the PIP joint (robust, orientation-agnostic)
+  const distTipToWrist = Math.sqrt(Math.pow(tip.x - wrist.x, 2) + Math.pow(tip.y - wrist.y, 2));
+  const distPipToWrist = Math.sqrt(Math.pow(pip.x - wrist.x, 2) + Math.pow(pip.y - wrist.y, 2));
+
+  // Secondary check: tip is "above" the PIP joint (works for standard upright hand orientation)
+  const tipAbovePip = tip.y < pip.y;
+
+  // A finger is extended when BOTH conditions agree (reduces false positives significantly)
+  return distTipToWrist > distPipToWrist && tipAbovePip;
 };
+
 
 export const getFingerStates = (landmarks: Landmark[]) => {
   // 0: Thumb, 1: Index, 2: Middle, 3: Ring, 4: Pinky
